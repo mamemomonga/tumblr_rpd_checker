@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"> 
+
+<title>rpd</title>
+
+
+<meta name="robots" content="noindex,nofollow">
+<meta name="robots" content="noarchive">
+
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.7.1.min.js"></script>
+
+<script type="text/javascript">//<![CDATA[
+
+var RPDCalc=function() {
+	this.wait=5000; // ミリ秒待つ
+};
+
+RPDCalc.prototype={
+	start: function() {
+		var t=this;
+		$('#execute').click(function() { t.execute() });
+	},
+
+	execute: function() {
+		var t=this;
+		$('#bloglist').hide();
+		t.lists=$('#blogs').val().split('\n');
+		t.mesg(t.lists.length+'件あります');
+		t.start_get_data();
+	},
+
+	start_get_data: function() {
+		var t=this;
+		if(t.lists.length==0) {
+			t.mesg('完了');
+			return;
+		}
+		t.get_data(t.lists.shift(),function() {
+			t.start_get_data();
+		});
+	},
+
+	get_data: function(blogname,cb) {
+		var t=this;
+		var jsons=[];
+		var rets={};
+		var url1="http://"+blogname+".tumblr.com/api/read/json";
+
+		t.mesg("取得中: "+url1);
+		t.json_loader2(url1, function(json1) {
+			jsons.push(json1);
+			var url2="http://"+blogname+".tumblr.com/api/read/json?start="+(parseInt(json1['posts-total'])-10);
+
+			t.mesg("取得中: "+url2);
+			t.json_loader2(url2, function(json2) {
+				jsons.push(json2);
+
+				// ブログ名
+				rets.blog = blogname;
+				// 総投稿数
+				rets.total = jsons[0]['posts-total'];
+				// 最初の投稿のUNIX時間
+				rets.ut_first = jsons[1].posts[9]['unix-timestamp'];
+				// 最後の投稿のUNIX時間
+				rets.ut_last  = jsons[0].posts[0]['unix-timestamp'];
+				// 最初の投稿から最後の投稿まで経過した秒数 
+				rets.seconds = rets.ut_last - rets.ut_first;
+				// 最初の投稿から最後の投稿まで経過した日数
+				rets.days    = Math.ceil( rets.seconds/86400 );
+				// リブログ/日
+				rets.rpd = rets.total / rets.days;
+
+				var dt_first = new Date( rets.ut_first*1000 );
+				rets.date_first=dt_first.getFullYear()+'/'+(dt_first.getMonth()+1)+'/'+dt_first.getDate();
+
+				var dt_last  = new Date( rets.ut_last*1000 );
+				rets.date_last=dt_last.getFullYear()+'/'+(dt_last.getMonth()+1)+'/'+dt_last.getDate();
+
+				$('#table').append('<tr>'
+					+'<td>'+rets.blog+'</td>'
+					+'<td>'+rets.total+'</td>'
+					+'<td>'+rets.date_first+'</td>'
+					+'<td>'+rets.date_last+'</td>'
+					+'<td>'+rets.days+'</td>'
+					+'<td>'+rets.rpd+'</td>'
+					+'</tr>'
+				);
+				cb(rets);
+			});
+		});
+	},
+
+	json_loader2: function(url,cb) {
+		var t=this;
+		setTimeout(function() {
+			t.json_loader(url,cb);
+		},t.wait);
+	},
+	json_loader: function(url,cb) {
+		var t=this;
+		var ifr=document.createElement('iframe');
+		document.body.appendChild(ifr);
+		ifr.style.display='none';
+		var d = ifr.contentWindow.document;
+
+		ifr.onload=function(e) {
+			cb(ifr.contentWindow.tumblr_api_read);
+			ifr.parentNode.removeChild(ifr);
+		};
+		ifr.onerror=function(e) {
+			t.mesg('エラーです '+e);
+		};
+		d.write('<scr'+'ipt src="'+url+'"></scr'+'ipt>');
+		d.close();	
+	},
+
+	mesg: function(mesg) {
+		$('#messages').prepend('<div>'+mesg+'</div>');
+	},
+
+};
+
+var rpd=new RPDCalc;
+$(function() { rpd.start() });
+//]]></script>
+
+<style type="text/css">
+body {
+	font-size: 12px;
+}
+p {
+	font-size: 20px;
+}
+table {
+	border: 1px black solid;
+	border-collapse: collapse;
+}
+table td {
+	border: 1px black solid;
+}
+</style>
+
+
+</head>
+<body>
+
+<h1>RPD (reblog/day)</h1>
+<p><a href="https://docs.google.com/spreadsheet/ccc?key=0AvfCgJ_IPjXIdDdNZjkxM0pDb0s0UUczSHZOelJwQkE">rpd</a></p>
+<table id="table">
+<tr>
+<td>blog</td>
+<td>total</td>
+<td>first_day</td>
+<td>last_day</td>
+<td>days</td>
+<td>rpd</td>
+</tr>
+</table>
+
+
+<div id="bloglist">
+ブログ名のリストを一行ずつ書いてください<br>
+<textarea id="blogs" width="40" rows="20"></textarea>
+<input type="button" id="execute" value="計測">
+</div>
+
+<div id="messages"></div>
+
+</body>
+</html>
+
